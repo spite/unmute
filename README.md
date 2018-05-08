@@ -1,2 +1,2 @@
 # unmute
-UI for Chrome autoplay policy
+Provides UI for new autoplay policy
