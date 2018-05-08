@@ -11,36 +11,35 @@ chrome.browserAction.onClicked.addListener(() => {
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.type == "unmute-notification") {
     tabs[sender.tab.id] = request.options.count;
-    chrome.browserAction.setBadgeText(
-      { text: `${request.options.count}` }
-    );
-    chrome.browserAction.setBadgeBackgroundColor({ color: "red" });
-    chrome.browserAction.setIcon({
-      path: "icon-38.png"
-    });
+    updateBadge(sender.tab.id);
   }
   if (request.type == "unmute-executed") {
     tabs[sender.tab.id] = 0;
-    chrome.browserAction.setIcon({
-      path: "icon0-38.png"
-    });
-    chrome.browserAction.setBadgeText(
-      { text: '' }
-    );
+    updateBadge(sender.tab.id);
   }
   //chrome.notifications.create('notification', request.options, function() { });
   sendResponse();
 });
 
 chrome.tabs.onActivated.addListener(function (activeInfo) {
-  console.log(activeInfo.tabId, tabs[activeInfo.tabId]);
-  if (tabs[activeInfo.tabId] > 0) {
+  updateBadge(activeInfo.tabId);
+});
+
+chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
+  if (changeInfo.status === 'loading') {
+    tabs[tabId] = 0;
+  }
+  updateBadge(tabId);
+});
+
+function updateBadge(tabId) {
+  if (tabs[tabId] > 0) {
     chrome.browserAction.setIcon({
       path: "icon-38.png"
     });
     chrome.browserAction.setBadgeBackgroundColor({ color: "red" });
     chrome.browserAction.setBadgeText(
-      { text: `${tabs[activeInfo.tabId]}` }
+      { text: `${tabs[tabId]}` }
     );
   } else {
     chrome.browserAction.setIcon({
@@ -50,5 +49,4 @@ chrome.tabs.onActivated.addListener(function (activeInfo) {
       { text: '' }
     );
   }
-});
-
+}
