@@ -1,10 +1,15 @@
 function inject() {
 
-	window.addEventListener('activate', () => {
+	let list = [];
+
+	window.addEventListener('unmute-activate', () => {
 		list.forEach(ctx => {
 			console.log('unmuting', ctx);
 			ctx.resume()
 		});
+		list = [];
+		const ev = new CustomEvent('unmute-executed');
+		window.dispatchEvent(ev);
 	});
 
 	window.Audio = new Proxy(window.Audio, {
@@ -21,15 +26,12 @@ function inject() {
 		}
 	});
 
-	const list = [];
 	window.AudioContext = new Proxy(window.AudioContext, {
 		construct(target, args) {
 			const result = new target(...args);
 			list.push(result);
-			console.log('Logging', result.state);
 			if (result.state !== 'running') {
-				console.log('unmute add button');
-				const ev = new CustomEvent('alert');
+				const ev = new CustomEvent('unmute-alert', { detail: { count: list.length } });
 				window.dispatchEvent(ev);
 			}
 			return result;
@@ -48,20 +50,24 @@ chrome.runtime.onMessage.addListener(
 		console.log(sender.tab ?
 			"from a content script:" + sender.tab.url :
 			"from the extension");
-		if (request.action == "activate") {
-			const ev = new CustomEvent('activate');
+		if (request.action == "unmute-activate") {
+			const ev = new CustomEvent('unmute-activate');
 			window.dispatchEvent(ev);
 			sendResponse({ farewell: "goodbye" });
 		}
 	});
 
-window.addEventListener('alert', () => {
+window.addEventListener('unmute-alert', (e) => {
 	chrome.runtime.sendMessage({
-		type: "notification", options: {
-			type: "basic",
-			iconUrl: chrome.extension.getURL("icon-128.png"),
-			title: "Test",
-			message: "Test",
+		type: "unmute-notification",
+		options: {
+			count: e.detail.count
 		}
 	});
-})
+});
+
+window.addEventListener('unmute-executed', () => {
+	chrome.runtime.sendMessage({
+		type: "unmute-executed"
+	});
+});
