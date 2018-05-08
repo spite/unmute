@@ -1,24 +1,44 @@
 const tabs = {};
+const notifications = {};
 
 chrome.browserAction.onClicked.addListener(() => {
   chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-    chrome.tabs.sendMessage(tabs[0].id, { action: "unmute-activate" }, function (response) {
-      console.log(response.farewell);
-    });
+    chrome.tabs.sendMessage(tabs[0].id, { action: "unmute-activate" }, function (response) { });
   });
 });
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.type == "unmute-notification") {
     tabs[sender.tab.id] = request.options.count;
+    chrome.notifications.create('notification', {
+      type: 'basic',
+      iconUrl: 'icon-128.png',
+      title: 'Web Audio Context',
+      message: `This tab is trying to use audio.
+Do you wish to allow it?`,
+      buttons: [{
+        title: "Yes, enable audio",
+        //iconUrl: "/path/to/yesIcon.png"
+      }]
+    }, function (notificationId) {
+      notifications[notificationId] = sender.tab.id;
+    });
     updateBadge(sender.tab.id);
   }
   if (request.type == "unmute-executed") {
     tabs[sender.tab.id] = 0;
     updateBadge(sender.tab.id);
   }
-  //chrome.notifications.create('notification', request.options, function() { });
   sendResponse();
+});
+
+chrome.notifications.onButtonClicked.addListener(function (notifId, btnIdx) {
+  const n = notifications[notifId];
+  if (n) {
+    if (btnIdx === 0) {
+      chrome.tabs.sendMessage(n, { action: "unmute-activate" }, function (response) { });
+    }
+  }
 });
 
 chrome.tabs.onActivated.addListener(function (activeInfo) {

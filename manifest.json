@@ -10,7 +10,8 @@
 		}
 	],
 	"permissions": [
-    "tabs"
+		"tabs",
+		"notifications"
   ],
 	"browser_action": {
 	},
