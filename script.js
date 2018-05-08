@@ -1,6 +1,26 @@
 function inject() {
 
 	let list = [];
+	let audioElements = [];
+	let unmuted = false;
+
+	const realPlay = window.Audio.prototype.play;
+	window.Audio.prototype.play = function() {
+		if (unmuted) {
+			// Can call play() without raising an exception.
+			realPlay.call(this);
+		}
+	};
+
+	const origCreateElement = window.document.createElement;
+		window.document.createElement = function(type) {
+		if (type != 'audio') {
+			return origCreateElement.call(this, type);
+		}
+		// Intercept creation of Audio element so that the proxy
+                // below gets created instead.
+		return new Audio();
+	};
 
 	window.addEventListener('unmute-activate', () => {
 		list.forEach(ctx => {
@@ -8,23 +28,25 @@ function inject() {
 			ctx.resume()
 		});
 		list = [];
+		audioElements.forEach(el => {
+			console.log('playing', el);
+			realPlay.call(el);
+		});
+		unmuted = true;
 		const ev = new CustomEvent('unmute-executed');
 		window.dispatchEvent(ev);
 	});
 
 	window.Audio = new Proxy(window.Audio, {
-		get: function (target, name, receiver) {
-			console.log(target, name, receiver);
-			if (name in target.__proto__) { // assume methods live on the prototype
-				return function (...args) {
-					var methodName = name;
-					// we now have access to both methodName and arguments
-				};
-			} else { // assume instance vars like on the target
-				return Reflect.get(target, name, receiver);
-			}
+		construct(target, args) {
+			console.log('Saw Audio construction');
+			const result = new target(...args);
+			audioElements.push(result);
+			const ev = new CustomEvent('unmute-alert', { detail: { count: list.length } });
+			window.dispatchEvent(ev);
+			return result;
 		}
-	});
+        });
 
 	window.AudioContext = new Proxy(window.AudioContext, {
 		construct(target, args) {
