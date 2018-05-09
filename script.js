@@ -2,7 +2,10 @@ function inject() {
 
 	let list = [];
 	let audioElements = [];
-	let unmuted = false;
+  const testAudioContext = new AudioContext();
+  if (testAudioContext.state !== 'running') {
+
+	let unmuted = false
 
 	const realPlay = window.Audio.prototype.play;
 	window.Audio.prototype.play = function() {
@@ -47,7 +50,7 @@ function inject() {
 			window.dispatchEvent(ev);
 			return result;
 		}
-        });
+  });
 
 	window.AudioContext = new Proxy(window.AudioContext, {
 		construct(target, args) {
@@ -60,6 +63,8 @@ function inject() {
 			return result;
 		}
 	});
+
+}
 }
 
 const source = inject.toString();
