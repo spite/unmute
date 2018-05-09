@@ -32,6 +32,7 @@ function inject() {
 			console.log('playing', el);
 			realPlay.call(el);
 		});
+		audioElements = [];
 		unmuted = true;
 		const ev = new CustomEvent('unmute-executed');
 		window.dispatchEvent(ev);
@@ -42,7 +43,7 @@ function inject() {
 			console.log('Saw Audio construction');
 			const result = new target(...args);
 			audioElements.push(result);
-			const ev = new CustomEvent('unmute-alert', { detail: { count: list.length } });
+			const ev = new CustomEvent('unmute-alert', { detail: { count: list.length + audioElements.length } });
 			window.dispatchEvent(ev);
 			return result;
 		}
@@ -53,7 +54,7 @@ function inject() {
 			const result = new target(...args);
 			list.push(result);
 			if (result.state !== 'running') {
-				const ev = new CustomEvent('unmute-alert', { detail: { count: list.length } });
+				const ev = new CustomEvent('unmute-alert', { detail: { count: list.length + audioElements.length } });
 				window.dispatchEvent(ev);
 			}
 			return result;
