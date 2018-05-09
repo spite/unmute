@@ -1,5 +1,5 @@
 # unmute
-Provides UI for new autoplay policy
+Provides UI to resume Audio Contexts and Audio elements suspended due to the new autoplay policy
 
 # How to use (for now)
 
