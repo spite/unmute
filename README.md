@@ -8,9 +8,10 @@ Provides UI to resume Audio Contexts and Audio elements suspended due to the new
 - Enable Developer Mode (top right corner)
 - Click LOAD UNPACKED 
 - Browse to the folder with the source
-- A pizza (for now) icon should appear next to the omnibar
+- A pause icon should appear next to the omnibar
 - Go into the extension details and enable Allow in incognito
 
 - Go to a page with Web Audio or HTML Audio
-- If the elements are suspended, the extension button should change to an emoji and show a number
-- Click on the button to resume those contexts or audios
+- If the elements are suspended, the pause button should change to a play button and show a number
+- Click on the button to resume those contexts or audio elements
+- Click on the button again to pause all of those contexts or audio elements
