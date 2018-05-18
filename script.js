@@ -1,70 +1,137 @@
 function inject() {
 
-	let list = [];
-	let audioElements = [];
-  const testAudioContext = new AudioContext();
-  if (testAudioContext.state !== 'running') {
+    class AudioList {
+        constructor(webAudioPlayFunc, webAudioPauseFunc,
+                    audioElPlayFunc, audioElPauseFunc) {
+            this._webAudioContexts = [];
+            this._audioElements = [];
 
-	let unmuted = false
+            this._webAudioPlayFunc = webAudioPlayFunc;
+            this._webAudioPauseFunc = webAudioPauseFunc;
+            this._audioElPlayFunc = audioElPlayFunc;
+            this._audioElPauseFunc = audioElPauseFunc;
+        }
 
-	const realPlay = window.Audio.prototype.play;
-	window.Audio.prototype.play = function() {
-		if (unmuted) {
-			// Can call play() without raising an exception.
-			realPlay.call(this);
-		}
-	};
+        addWebAudioContext(ctx) {
+            this._webAudioContexts.push(ctx);
+        }
 
-	const origCreateElement = window.document.createElement;
-		window.document.createElement = function(type) {
-		if (type != 'audio') {
-			return origCreateElement.call(this, type);
-		}
-		// Intercept creation of Audio element so that the proxy
-                // below gets created instead.
-		return new Audio();
-	};
+        addAudioElement(el) {
+            this._audioElements.push(el);
+        }
 
-	window.addEventListener('unmute-activate', () => {
-		list.forEach(ctx => {
-			console.log('unmuting', ctx);
-			ctx.resume()
-		});
-		list = [];
-		audioElements.forEach(el => {
-			console.log('playing', el);
-			realPlay.call(el);
-		});
-		audioElements = [];
-		unmuted = true;
-		const ev = new CustomEvent('unmute-executed');
-		window.dispatchEvent(ev);
-	});
+        takeAll(other) {
+            this._webAudioContexts = this._webAudioContexts.concat(other._webAudioContexts);
+            this._audioElements = this._audioElements.concat(other._audioElements);
+            other._webAudioContexts = [];
+            other._audioElements = [];
+        }
 
-	window.Audio = new Proxy(window.Audio, {
-		construct(target, args) {
-			console.log('Saw Audio construction');
-			const result = new target(...args);
-			audioElements.push(result);
-			const ev = new CustomEvent('unmute-alert', { detail: { count: list.length + audioElements.length } });
-			window.dispatchEvent(ev);
-			return result;
-		}
-  });
+        length() {
+            return this._webAudioContexts.length + this._audioElements.length;
+        }
 
-	window.AudioContext = new Proxy(window.AudioContext, {
-		construct(target, args) {
-			const result = new target(...args);
-			list.push(result);
-			if (result.state !== 'running') {
-				const ev = new CustomEvent('unmute-alert', { detail: { count: list.length + audioElements.length } });
-				window.dispatchEvent(ev);
-			}
-			return result;
-		}
-	});
+        _runOnAll(webAudioFunc, audioElFunc) {
+            this._webAudioContexts.forEach(el => {
+                webAudioFunc.call(el);
+            });
+            this._audioElements.forEach(el => {
+                audioElFunc.call(el);
+            });
+        }
 
-}
+        play() {
+            this._runOnAll(this._webAudioPlayFunc, this._audioElPlayFunc);
+        }
+
+        pause() {
+            this._runOnAll(this._webAudioPauseFunc, this._audioElPauseFunc);
+        }
+    }
+
+    // Interpose on Audio elements and WebAudio contexts.
+    const realPlay = window.Audio.prototype.play;
+    const realPause = window.Audio.prototype.pause;
+    const realSuspend = window.AudioContext.prototype.suspend;
+    const realResume = window.AudioContext.prototype.resume;
+
+    let globalList = new AudioList(realResume, realSuspend, realPlay, realPause);
+    let newList = new AudioList(realResume, realSuspend, realPlay, realPause);
+    let forciblyMuted = false;
+
+    function raiseBadge() {
+        window.dispatchEvent(new CustomEvent(
+            'unmute-alert',
+            { detail: { count: newList.length() } }
+        ));
+    }
+
+    window.Audio.prototype.play = function() {
+        if (forciblyMuted) {
+            return Promise.reject(new DOMException('Audio forcibly muted by unmute extension'));
+        }
+
+        return realPlay.call(this).catch(err => {
+            // play() raised an exception. Raise the badge and then propagate it.
+            raiseBadge();
+            throw err;
+        });
+    };
+
+    window.Audio = new Proxy(window.Audio, {
+        construct(target, args) {
+            const result = new target(...args);
+            newList.addAudioElement(result);
+            return result;
+        }
+    });
+
+    const origCreateElement = window.document.createElement;
+    window.document.createElement = function(type) {
+        if (type != 'audio') {
+            return origCreateElement.call(this, type);
+        }
+        // Intercept creation of Audio element so that the proxy
+        // above gets created instead.
+        return new Audio();
+    };
+
+    window.AudioContext.prototype.resume = function() {
+        if (forciblyMuted) {
+            console.log('AudioContexts forcibly muted by unmute extension');
+            return Promise.resolve();
+        }
+
+        return realResume.call(this);
+    };
+
+    window.AudioContext = new Proxy(window.AudioContext, {
+        construct(target, args) {
+            const result = new target(...args);
+            newList.addWebAudioContext(result);
+            if (result.state !== 'running') {
+                raiseBadge();
+            }
+            return result;
+        }
+    });
+
+    window.addEventListener('unmute-playnew', () => {
+        forciblyMuted = false;
+        newList.play();
+        globalList.takeAll(newList);
+    });
+
+    window.addEventListener('unmute-playall', () => {
+        forciblyMuted = false;
+        globalList.play();
+    });
+
+    window.addEventListener('unmute-pause', () => {
+        globalList.pause();
+        newList.pause();
+        forciblyMuted = true;
+    });
 }
 
 const source = inject.toString();
@@ -74,28 +141,21 @@ script.async = false;
 document.documentElement.appendChild(script);
 
 chrome.runtime.onMessage.addListener(
-	function (request, sender, sendResponse) {
-		console.log(sender.tab ?
-			"from a content script:" + sender.tab.url :
-			"from the extension");
-		if (request.action == "unmute-activate") {
-			const ev = new CustomEvent('unmute-activate');
-			window.dispatchEvent(ev);
-			sendResponse({ farewell: "goodbye" });
-		}
-	});
+    function (request, sender, sendResponse) {
+        console.log(sender.tab ?
+            "from a content script:" + sender.tab.url :
+            "from the extension");
+        if (request.action.startsWith('unmute-')) {
+            const ev = new CustomEvent(request.action);
+            window.dispatchEvent(ev);
+        }
+    });
 
 window.addEventListener('unmute-alert', (e) => {
-	chrome.runtime.sendMessage({
-		type: "unmute-notification",
-		options: {
-			count: e.detail.count
-		}
-	});
-});
-
-window.addEventListener('unmute-executed', () => {
-	chrome.runtime.sendMessage({
-		type: "unmute-executed"
-	});
+    chrome.runtime.sendMessage({
+        type: "unmute-notification",
+        options: {
+            count: e.detail.count
+        }
+    });
 });
